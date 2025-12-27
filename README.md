@@ -1,5 +1,8 @@
-# HMP (Heap Memory Protector) — Research Artifact (Simulation)
+# HMS (Meap Memory Safeguard) — Research Artifact (Simulation)
 
+* Old name: HMP (Heap Memory Protector) 
+* Current name: HMS (Meap Memory Safeguard)
+* 
 This repository provides a **self-contained simulation** and scripts to **reproduce the paper’s key results**:
 - Parameter sensitivity plots (e.g., `fig9_W1_alpha_vs_Sh_3alpha.png`, `fig9_W2_theta1_vs_Lr.png`, `fig9_W3_theta2_vs_Sh.png`, `fig9_W4_theta2_vs_Lr.png`, `fig_param_sensitivity.png`)
 - A summary metrics table (CSV) comparing **Baseline** vs **HMP** across workloads **W1–W4**: heap stability (Sₕ), reclaim latency (Lᵣ), GC pause (T_gc), peak RSS reduction, and energy overhead
