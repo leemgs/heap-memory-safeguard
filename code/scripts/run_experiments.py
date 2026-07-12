@@ -9,7 +9,7 @@ def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
 
 def main():
-    ap = argparse.ArgumentParser(description="Reproduce HMP results (simulation)")
+    ap = argparse.ArgumentParser(description="Reproduce HMS results (simulation)")
     ap.add_argument("--alpha", type=float, default=0.35)
     ap.add_argument("--theta1", type=float, default=0.12)
     ap.add_argument("--theta2", type=float, default=0.18)

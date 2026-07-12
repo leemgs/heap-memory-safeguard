@@ -1,6 +1,9 @@
-# HMP Kernel Module (Out-of-Tree, Research Scaffold)
+# HMS Kernel Module (Out-of-Tree, Research Scaffold)
 
-이 모듈은 논문 속 HMP 개념을 **리눅스 커널 공간에서 실험**할 수 있도록 하는 최소 구현 예제입니다.
+> 파일/심볼 이름(`hmp_kmod`, `/dev/hmp_ctl` 등)은 구명칭(HMP)을 그대로 유지하지만,
+> 시스템 명칭은 논문과 동일하게 **HMS (Heap Memory Safeguard)** 입니다.
+
+이 모듈은 논문 속 HMS 개념을 **리눅스 커널 공간에서 실험**할 수 있도록 하는 최소 구현 예제입니다.
 실제 memcg 훅, MTE 연동 등을 포함하지 않는 **연구용 스캐폴드**이며, sysfs를 통해 파라미터를 조정하고
 간단한 메모리 지표를 관찰할 수 있습니다.
 

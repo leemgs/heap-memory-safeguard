@@ -21,7 +21,7 @@ def get_snapshot(dev: str = DEV) -> dict:
     return json.loads(data.decode("utf-8"))
 
 def main():
-    ap = argparse.ArgumentParser(description="HMP user-space bridge to /dev/hmp_ctl")
+    ap = argparse.ArgumentParser(description="HMS user-space bridge to /dev/hmp_ctl")
     ap.add_argument("--dev", default=DEV, help="device path (default: /dev/hmp_ctl)")
     ap.add_argument("--set", nargs=2, action="append", metavar=("KEY","VAL"),
                     help="Set a parameter (alpha_milli|theta1_milli|theta2_milli|rss_limit_mb)")

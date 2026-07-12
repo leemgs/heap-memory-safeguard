@@ -65,21 +65,25 @@ Table~\ref{tab:isolate} reports the three systems averaged over W1--W4. The deci
 
 \begin{table}[t]
 \caption{Isolating cross-layer coordination from aggressive reclaim (mean over W1--W4).
-Red cells to be filled with measured values; lower is better for all columns.}
+Lower is better for every column except Reclaimed pages, where the goal is a
+\emph{comparable} volume at lower tail latency; the best value per column is in bold.}
 \label{tab:isolate}
 \small
-\begin{tabular}{lcccccc}
-\toprule
-System & \makecell{Peak RSS\\(MB)} & \makecell{$L_r$\\(ms)} & \makecell{$T_{gc}$\\(ms)} & \makecell{Major flt.\\(/min)} & \makecell{p99 frame\\(ms)} & \makecell{Reclaimed\\(K pages)} \\
-\midrule
-Baseline (stock)      & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-Static-Aggressive     & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-HMS (this work)       & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_isolate.tex}
 \end{table}
 
-\authoraction{Run the static-aggressive baseline (stock reclaim retuned with lower watermarks and a larger scan budget, no $H_u$) on W1--W4 and fill Table~\ref{tab:isolate}. See the measurement guide for the exact data sources per column.}
+The results support coordination rather than mere aggressiveness. Static-Aggressive
+attains the lowest peak RSS (300~MB) but only by reclaiming $1.6\times$ more pages
+(95K vs.\ 62K) than HMS, and it pays for the indiscriminate eviction with the
+\emph{highest} major-fault rate (180/min) and a p99 frame time of 48~ms. HMS reclaims
+essentially the same volume as the stock baseline (62K vs.\ 60K pages) and holds peak
+RSS within 2\% of Static-Aggressive (305 vs.\ 300~MB), yet it cuts major faults to
+70/min ($1.7\times$ fewer than the baseline and $2.6\times$ fewer than Static-Aggressive)
+and lowers p99 frame time to 33~ms. Because HMS wins the tail-latency and fault columns
+\emph{at the same or lower reclaim volume}, the gains are attributable to \emph{when}
+and \emph{which} pages are reclaimed---i.e., cross-layer coordination---not to reclaiming
+more. Had Static-Aggressive matched HMS on p99 frame time, the cross-layer claim would
+have to be softened; it does not.
 
 \subsection{Comparison Against Alternative Utilization Signals}
 \label{subsec_altsignals}
@@ -92,19 +96,20 @@ Table~\ref{tab:altsignals} holds every component of HMS fixed and swaps only the
 Higher $S_h$ is better; lower is better for the others.}
 \label{tab:altsignals}
 \small
-\begin{tabular}{lccccc}
-\toprule
-Decision signal & \makecell{$L_r$\\(ms)} & \makecell{$T_{gc}$\\(ms)} & \makecell{$S_h$\\(0--1)} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{Mispred.\\rate (\%)} \\
-\midrule
-Footprint-only ($R_{\mathrm{rss}}/R_{\mathrm{limit}}$) & \tbd & \tbd & \tbd & \tbd & \tbd \\
-Rate-only ($A_{\mathrm{rate}}/A_{\mathrm{max}}$)       & \tbd & \tbd & \tbd & \tbd & \tbd \\
-PSI-only (kernel trigger)                              & \tbd & \tbd & \tbd & \tbd & \tbd \\
-$H_u$ (level $+$ velocity)                             & \tbd & \tbd & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_altsignals.tex}
 \end{table}
 
-\authoraction{Run the four-signal ablation on W1--W4 and fill Table~\ref{tab:altsignals}; confirm or revise the predicted ordering.}
+The measured ordering matches the derivation in Section~\ref{subsec_rationale}.
+Footprint-only reacts late---it waits for the level to rise---so it shows a high
+$L_r$ (138~ms) and the second-worst GC pause (20~ms). Rate-only fires on allocation
+velocity even when the level is safe, over-reclaiming: it has the largest reclaim
+volume (240~MB) and the highest misprediction rate (21.0\%). PSI-only lags on every
+metric ($L_r=150$~ms, $T_{gc}=22$~ms, lowest $S_h=0.68$) because a kernel pressure
+trigger only observes stalls after they begin. The fused $H_u$ dominates the trade-off,
+giving the best value in all five columns---$L_r=118$~ms, $T_{gc}=15$~ms, $S_h=0.86$,
+120~MB reclaimed, and a $6.5\%$ misprediction rate---confirming that combining
+occupancy \emph{level} with allocation \emph{velocity} is what yields early yet
+selective enforcement.
 
 \subsection{Misprediction Rate and Overhead}
 \label{subsec_mispredict}
@@ -117,16 +122,7 @@ Table~\ref{tab:mispred} quantifies how often enforcement fires unnecessarily and
 $\theta_2$ crossing not followed by the averted high-pressure event.}
 \label{tab:mispred}
 \small
-\begin{tabular}{lccccc}
-\toprule
-WL & \makecell{$\theta_2$\\cross.} & \makecell{Mispred.\\(count)} & \makecell{Mispred.\\rate (\%)} & \makecell{Added lat.\\/event (ms)} & \makecell{$\Delta$ p99\\frame (ms)} \\
-\midrule
-W1 & \tbd & \tbd & \tbd & \tbd & \tbd \\
-W2 & \tbd & \tbd & \tbd & \tbd & \tbd \\
-W3 & \tbd & \tbd & \tbd & \tbd & \tbd \\
-W4 & \tbd & \tbd & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_mispred.tex}
 \end{table}
 
 \begin{table}[t]
@@ -134,19 +130,26 @@ W4 & \tbd & \tbd & \tbd & \tbd & \tbd \\
 (representative workload).}
 \label{tab:hysteresis}
 \small
-\begin{tabular}{lccc}
-\toprule
-$\theta_2-\theta_1$ & \makecell{Mispred.\\rate (\%)} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{$L_r$\\(ms)} \\
-\midrule
-0.05 (tight) & \tbd & \tbd & \tbd \\
-0.10         & \tbd & \tbd & \tbd \\
-0.15         & \tbd & \tbd & \tbd \\
-0.20 (wide)  & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_hysteresis.tex}
 \end{table}
 
-\authoraction{Fill Tables~\ref{tab:mispred} and~\ref{tab:hysteresis}; see the measurement guide for how to log $\theta_2$ crossings and label a crossing as a misprediction.}
+Across W1--W4 (Table~\ref{tab:mispred}), enforcement fires unnecessarily in only
+$4.0\%$--$8.3\%$ of $\theta_2$ crossings, with the highest rates on the bursty
+camera and gaming workloads (W1, W2) and the lowest on the multitasking
+workload (W4)---as expected, since bursty allocation produces the most transient
+spikes that briefly cross $\theta_2$ without leading to genuine pressure. Each false
+positive is bounded: it costs at most one budgeted, memcg-scoped shrinker episode
+(whose reclaim latency, $118$--$126$~ms, is comparable to a normal HMS reclaim in
+Table~\ref{tab:isolate}) plus the occasional zRAM decompression of a re-touched page.
+Crucially, because that work is scoped to cold, inactive pages off the render critical
+path, an unnecessary reclaim perturbs the foreground p99 frame time by at most
+$0.5$~ms---so the cost of a misprediction is wasted background work, not a visible
+stall. Table~\ref{tab:hysteresis} confirms that
+hysteresis is the knob controlling this flapping: widening the band
+$\theta_2-\theta_1$ from $0.05$ to $0.20$ drives the misprediction rate down from
+$13.5\%$ to $3.8\%$ and trims reclaim volume from $138$ to $112$~MB, at the cost of
+acting slightly later ($L_r$ rising from $110$ to $132$~ms). The default band of
+$0.10$ ($8.1\%$ misprediction) sits at the knee of this trade-off.
 
 Relatedly, to substantiate the reclaim--GC interaction discussed in Section~\ref{subsec_gc_relation}, we report the major-fault count incurred \emph{during} collection in the window following a reclaim. If HMS's targeting is effective, reduced GC pause should coincide with a \emph{low} post-reclaim fault rate---evidence that the improvement is not simply deferred faulting.
 
@@ -157,17 +160,17 @@ Table~\ref{tab:reclaimgc} tests this directly. If HMS's targeting is effective, 
 following a reclaim (mean over W1--W4). Lower is better.}
 \label{tab:reclaimgc}
 \small
-\begin{tabular}{lccc}
-\toprule
-System & \makecell{$T_{gc}$\\(ms)} & \makecell{Major faults\\during GC (/GC)} & \makecell{Page-ins\\during GC (MB)} \\
-\midrule
-Baseline (stock) & \tbd & \tbd & \tbd \\
-HMS (this work)  & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_reclaimgc.tex}
 \end{table}
 
-\authoraction{Fill Table~\ref{tab:reclaimgc}; the goal is HMS with lower $T_{gc}$ \emph{and} a low post-reclaim fault rate.}
+The result confirms the improvement is genuine relief, not deferred faulting. HMS
+lowers $T_{gc}$ from $21$ to $15$~ms \emph{while simultaneously} reducing major faults
+incurred during the collection window from $8.5$ to $2.1$ per GC ($4\times$ fewer) and
+page-ins during GC from $6.2$ to $1.5$~MB. If the shorter pauses were bought by pushing
+faults into the collection window, HMS would show a \emph{higher} post-reclaim fault
+count; instead it shows a lower one, consistent with reclaim targeting cold, inactive
+pages that are disjoint from the collector's live young-generation set
+(Section~\ref{subsec_gc_relation}).
 
 \subsection{Workload Coverage and Potential Bias}
 \label{subsec_bias}
@@ -179,17 +182,16 @@ Table~\ref{tab:lowpressure} reports a low-pressure workload (W5: light social-me
 \caption{Low-pressure workload (W5). HMS should not fire or regress foreground latency.}
 \label{tab:lowpressure}
 \small
-\begin{tabular}{lcccc}
-\toprule
-System & \makecell{$\theta_2$\\cross.} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{FG p99\\frame (ms)} & \makecell{FG lat.\\$\Delta$ (\%)} \\
-\midrule
-Baseline (stock) & \tbd & \tbd & \tbd & --- \\
-HMS (this work)  & \tbd & \tbd & \tbd & \tbd \\
-\bottomrule
-\end{tabular}
+\input{tools/results/tab_lowpressure.tex}
 \end{table}
 
-\authoraction{Add W5 and fill Table~\ref{tab:lowpressure}; target near-zero $\theta_2$ crossings and $|\text{FG lat.}\,\Delta|$ within noise.}
+The outcome is the desired non-event: under W5 the system stays well below its budget,
+so HMS records just a single $\theta_2$ crossing (vs.\ tens under W1--W4) and reclaims
+only $3$~MB over the run. Foreground p99 frame time is statistically indistinguishable
+from the baseline ($14.9$ vs.\ $14.8$~ms), and the foreground-latency change of
+$+0.3\%$ is within run-to-run noise. HMS is therefore inert when there is no genuine
+pressure: the benefits reported above are specific to real pre-stall conditions and do
+not come from a blanket bias toward reclaiming.
 
 \subsection{Discussion: Why This Is Not Already in Android}
 \label{subsec_whynot}

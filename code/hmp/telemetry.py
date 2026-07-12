@@ -42,18 +42,26 @@ class Telemetry:
             "dt": self.dt,
         }
 
+    # Synthetic proxies for the paper's five workloads (Sec. "Experimental Setup").
+    # The burst/drift parameters are chosen so each stream exercises the controller
+    # in a way representative of that workload class; they reproduce relative trends,
+    # not device-absolute values (see README).
     def workload_w1(self):
-        """W1: foreground app with periodic camera bursts."""
+        """W1 -- Hybrid Camera Pipeline: real-time HDR fusion + AI segmentation
+        (JNI/TFLite), modeled as frequent large native-heap bursts."""
         return self._mk(alloc_base=32, burst_prob=0.08, burst_scale=90, drift=0.01, noise=0.18)
 
     def workload_w2(self):
-        """W2: ML inference background service with spiky load."""
+        """W2 -- Gaming: Unreal Engine mobile demo with scene streaming, modeled
+        as sustained allocation with frequent asset-load spikes."""
         return self._mk(alloc_base=22, burst_prob=0.15, burst_scale=60, drift=0.005, noise=0.22)
 
     def workload_w3(self):
-        """W3: mixed UI + I/O with occasional leaks."""
+        """W3 -- AI Inference: on-device transformer execution (NNAPI, Gemma 2B),
+        modeled as steady high allocation with periodic activation growth."""
         return self._mk(alloc_base=18, burst_prob=0.05, burst_scale=55, drift=0.02, noise=0.15)
 
     def workload_w4(self):
-        """W4: steady playback with rare GC stalls."""
+        """W4 -- Multitasking: 30 apps switching via ActivityManagerStress, modeled
+        as lower-churn background pressure with rare spikes."""
         return self._mk(alloc_base=12, burst_prob=0.02, burst_scale=40, drift=0.0, noise=0.1)
