@@ -1,0 +1,49 @@
+\section{Related Work}
+\label{sec_related}
+Software runtimes, operating system kernels, and hardware features have all contributed to the advancement of mobile device memory management research. Here, we summarize the key issues and trends addressed in previous research.
+
+
+\subsection{Runtime-Level Heap Optimization}
+Virtual machines such as Dalvik and ART were at the center of the first attempts to improve memory handling in mobile environments. Reducing garbage collection latency and memory fragmentation without exceeding the limited memory capacity of mobile devices has been an ongoing challenge for developers. Recent adaptive garbage collection techniques \cite{TC_10045641,TCE_Yan2019_FileAwareGC}, which adjust their behavior according to workload patterns, have made considerable progress in this area. These strategies, along with the introduction of concurrent and generational garbage collectors, have helped reduce pause times. However, in applications currently heavy in multimedia and AI workloads, a significant portion of native memory allocations are primarily confined to the managed heap, and their impact has not been properly addressed \cite{TCE_Xu2025_ARVR}.
+
+
+\subsection{Kernel-Level Memory Reclamation}
+Kernel-Level Memory Reclamation: On the kernel side, various strategies have been used to handle limited memory resources. Both embedded and mobile devices have explored existing concepts such as page reclamation and compaction, as well as new concepts such as compressed swap and shared swap \cite{TCE_Hwang2012_CompressedSwap,TC_9252863}. Recent advances in allocator-level compaction have further reduced page fragmentation \cite{TC_9513533, TC_9140304}. Despite these advances, kernel-based memory reclamation typically operates at the page level and often lacks information about higher-level heap usage, potentially resulting in unnecessary or erroneous memory reclamation.
+
+
+
+
+\subsection{Hardware-Assisted Memory Protection}
+In general, hardware innovations, such as ARM memory tagging extensions, can significantly reduce the effort required by programmers to detect memory errors without sacrificing performance. However, the relatively old problem of heap size growth and fragmentation remains unresolved. Despite the rapid development of hardware tools, it is becoming increasingly clear that common and complex memory management problems at higher layers cannot be solved with these tools alone. This situation is very similar to past experiences in the co-design of mobile devices, where hardware-level improvements alone failed to completely resolve widespread and complex memory management problems at higher layers~\cite{TCE_Shin2010_FTL, TC_11313797}.
+
+
+\subsection{Cross-Layer Memory Management Approaches}
+Recent studies have endeavored to establish a connection between hardware, kernel, and runtime management. For example, one study proposed a prediction-based inter-tier resource management scheme to improve overall efficiency in mobile and edge computing environments \cite{TC_10320372}. While other research has focused on federated learning and dynamic optimization for cloud-edge inference, these approaches tend to prioritize network efficiency and latency over heap stability \cite{TCE_Wang2025_CloudEdge}. This work differentiates itself from existing research by directly integrating insights into the runtime, kernel, and hardware to stabilize heap usage on mobile devices.
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{Positioning of HMS relative to prior memory-management families.
+\ding{51}~= addressed, \ding{55}~= not addressed, $\sim$~= partial.}
+\label{tab:related_compare}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Approach} & \makecell{\textbf{Native}\\\textbf{visibility}} & \makecell{\textbf{Heap}\\\textbf{semantics}} & \makecell{\textbf{Proactive}\\\textbf{(pre-stall)}} & \makecell{\textbf{Cross-layer}\\\textbf{feedback}} \\
+\hline
+Runtime-only GC~\cite{TC_10045641,TCE_Yan2019_FileAwareGC}      & \ding{55} & \ding{51} & $\sim$ & \ding{55} \\
+Kernel reclaim/compaction~\cite{TC_9513533,TC_9140304}          & \ding{51} & \ding{55} & \ding{55} & \ding{55} \\
+Compressed/shared swap~\cite{TCE_Hwang2012_CompressedSwap,TC_10851391} & \ding{51} & \ding{55} & \ding{55} & \ding{55} \\
+Hardware tagging (MTE)~\cite{TC_10713235}                        & $\sim$ & \ding{55} & \ding{55} & \ding{55} \\
+Inter-tier prediction~\cite{TC_10320372,TCE_Wang2025_CloudEdge}  & $\sim$ & $\sim$ & \ding{51} & $\sim$ \\
+\textbf{HMS (this work)}                                         & \ding{51} & \ding{51} & \ding{51} & \ding{51} \\
+\hline
+\end{tabular}
+\end{table}
+
+\noindent
+Table~\ref{tab:related_compare} summarizes the positioning stated in Section~\ref{sec_related}: prior families each cover part of the problem---runtime techniques keep heap semantics but miss native growth, kernel and swap techniques see pages but not semantics, hardware tagging targets safety rather than growth, and inter-tier predictors optimize for network/latency rather than heap stability---whereas HMS is the combination that couples native visibility, heap semantics, proactive triggering, and bidirectional feedback in one loop.
+
+
+
+
+

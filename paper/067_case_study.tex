@@ -1,0 +1,50 @@
+\section{Case Study: Real-World Mobile Workloads}
+\label{sec_case}
+To verify the practical effectiveness of the proposed HMS, we applied it to two commercial Android (API 35) devices used in mobile and industrial environments.
+This deployment follows the testing methodology of existing home appliances, testing resource control mechanisms using real-world user workloads and operating constraints \cite{TCE_Goswami2024_ResourceAlloc}.
+Here, ``\textit{mobile AI workloads}'' refer to applications that consume significant memory and processing power on modern smartphones, such as AI-based camera processing or augmented reality (AR) navigation. These are examples of AI commonly used in home appliances \cite{TCE_Wang2025_CloudEdge, TCE_Xu2025_ARVR}.
+Compared to existing mobile applications, these workloads combine more heterogeneous pipelines and multi-domain intelligence, which amplifies transient memory bursts and resource allocation pressure \cite{TC_10713235}.
+
+
+\subsection{Case 1: On-Device AI Camera Application}
+In this study, we analyzed a camera application that combines real-time HDR (High Dynamic Range) synthesis and object segmentation. This is a mobile image processing pipeline commonly found in mobile devices \cite{TCE_Kim2018_QoS}. The application includes both a Java-based UI and control path, as well as native components. JNI is used to call TensorFlow Lite segmentation models and C++ image post-processing functions. A Java-native hybrid stack is commonly used in modern on-device intelligence workloads \cite{TC_10564838}.
+
+
+\textbf{Baseline Behavior:}
+Without HMS, the native heap size spiked from 380 MB to 1.2 GB during continuous shooting. This resulted in zRAM swapping, three GC pauses of 50 ms or more, shutter lag, and UI frame drops (approximately 6 fps loss).
+This behavior is consistent with irregular paging activity caused by poor memory reclamation or incorrect memory policies in mobile systems, resulting in significant user delays \cite{TCE_Hwang2012_CompressedSwap,TC_10851391}.
+
+
+\textbf{With HMS:}
+After 8 seconds, the Runtime Observer detected an abnormal growth pattern and sent a recovery request to the kernel. Inactive anonymous pages were reclaimed and compressed, maintaining a maximum RSS of 302 MB.
+This operation, which considers both the allocator and the compressor, is consistent with an existing kernel-level compaction technique \cite{TC_9513533}. that has been proven to reduce fragmentation when the workload dynamically changes.
+GC frequency was reduced by 30\%, and shutter latency was reduced from 110 ms to 72 ms.
+The reduction in pauses and swap bursts is consistent with previous research showing that adaptive reclamation and workload-aware garbage collection improve responsiveness in memory-constrained environments \cite{TC_10045641,TCE_Yan2019_FileAwareGC}.
+No noticeable delays were detected during 30 minutes of continuous operation, demonstrating that cooperative reclamation can maintain stable responsiveness even in hybrid AI workloads \cite{TC_aidnn}.
+
+
+\subsection{Case 2: Mobile AR Navigation System}
+In this case study, we observed that an AR navigation application using GPS, SLAM, and OpenGL-ES placed heavy demands on memory, frequently allocating short-lived buffers and textures through native libraries.
+
+\textbf{Baseline Behavior:}
+Using the default memory manager, intermittent frame drops occurred when switching between indoor and outdoor map modes. Based on the heap analysis, approximately 32\% of the memory is fragmented, which may have caused LMKd to terminate background services due to OOM-adj errors and is also the reason it runs every 3-5 minutes. This means that memory fragmentation has a very big influence on system stability. It is very much like the page-centric memory reclaiming. The method does not include the application-level memory behavior in the reclamation policy, which causes the latency to be unstable if the workload changes \cite{TCE_Lim2013_VMP}.
+
+
+\textbf{With HMS:}
+The kernel dynamically induces compaction of inactive page groups, and the runtime observer performs garbage collection in parallel with the idle window of the rendering thread.
+As a result, the fragmentation rate decreased to 11\%, the average frame delay decreased from 22ms to 15ms, and LMKd calls were completely eliminated.
+These improvements are consistent with existing operating system-level strategies that integrate allocator-aware compaction with synchronization counts to maintain consistent user-visible latency during mode transitions \cite{TC_9513533}.
+The absence of noticeable stuttering during extended navigation sessions demonstrates that optimized heap management can maintain responsiveness even in memory-intensive AR workloads.
+
+\subsection{Lessons Learned}
+Here are three key points to remember in both situations:
+\begin{enumerate}
+    \item \textbf{Cross-Layer Synchronization:} By tuning GC, kernel recovery, and hardware feedback, we can prevent unnecessary memory reclamation and fragmentation, effectively managing the user's UI. This principle is consistent with the trend toward increased inter-layer control in embedded and mobile edge platforms. Coordinating policies can improve overall system performance \cite{TC_10320372}.
+    \item \textbf{ Sustainability:} Preventing swap bursts reduces CPU wakeups and throttling, which is critical for AR and camera workloads. Mobile device research also suggests that memory management is crucial for maintaining interactive performance \cite{TCE_Protogeros2025_FL}.
+    \item \textbf{Developer Transparency:} HMS requires no application code changes and is compatible with all Android software.
+\end{enumerate}
+
+\vspace{\baselineskip}
+Finally, it is important to emphasize that the system for hardware-level stability is tightly coupled. Low-level storage and wear management strategies often improve device reliability, but they cannot directly address heap instability. This highlights the importance of OS-integrated control \cite{TCE_Shin2010_FTL,TPDS_4620111}.
+
+These real-world tests demonstrate that HMS's active, OS-integrated design balances responsiveness and reliability when running a variety of Android (API 35) workloads. This research emphasizes heap stability over inference performance, highlighting the recent shift from cloud-edge collaboration to runtime adaptive optimization \cite{TCE_Wang2025_CloudEdge}.

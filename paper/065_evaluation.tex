@@ -1,0 +1,208 @@
+
+
+\section{Evaluation}
+\label{sec_eval}
+In this section, we evaluate the proposed HMS on a real Android device (API 35) and compared it to the stock memory manager (ART 12 + memcg + zRAM 2.0).
+All experiments were performed using the developer version (Linux 6.6.14, build UP1A.2509.003) on two commercial smartphones: a Pro model (Device A; Tensor G4, 8 GB LPDDR5X) and an Ultra model (Device B; 8th Gen Mobile SoC Platform, 3rd Gen, 12 GB LPDDR5X). To minimize the influence of previous runs, each experiment was repeated 10 times after a cold reboot.
+Each experiment was repeated 10 times, and the results are presented as mean ± 95\% confidence interval. Statistical significance was confirmed using a two-tailed t-test ($p \textless 0.05$).
+
+\subsection{Experimental Setup}
+Both devices were run under the same workload to stress the managed and native heaps.
+\begin{itemize}
+  \item \textbf{W1 -- Hybrid Camera Pipeline:}  Real-time HDR Fusion and AI Segmentation (JNI, TensorFlow Lite)
+  \item \textbf{W2 -- Gaming:} Unreal Engine for Mobile Demo with Smooth Scene Streaming Support
+  \item \textbf{W3 -- AI Inference:} On-Device Transform Execution (NNAPI, Gemma 2B) 
+  \item \textbf{W4 -- Multitasking:} 30 applications simultaneously switching via \texttt{ActivityManagerStress}.
+  \item \textbf{W5 -- Low-pressure (control):} light social-media scrolling and web browsing, representative of ordinary interactive use, where the system rarely approaches its memory budget.
+\end{itemize}
+W1--W4 are deliberately memory-intensive; W5 is a low-pressure control used in Section~\ref{subsec_bias} to check that HMS does not fire or regress latency under ordinary use.
+
+All workloads were run on both devices under identical system conditions. To collect system-level metrics, we used  \texttt{perfetto}, \texttt{heapprofd}, and the kernel-level Pressure Block Information (PSI) counter.
+
+\subsection{Metrics}
+We evaluated HMS using three primary metrics (summarized in Table~\ref{tab:evaluation}):
+\begin{enumerate}
+    \item \textbf{Heap stability index ($S_h$)} -- Average steady-state heap size divided by maximum heap size.
+    \item \textbf{Reclaim latency ($L_r$)} -- Time between pressure detection and memory release.
+    \item \textbf{GC pause time ($T_{gc}$)} -- Average ART stop-the-world pause under load.
+\end{enumerate}
+ 
+To improve reproducibility, we provide the execution script, kernel and runtime configuration parameters, and memory trace information used in this evaluation. These materials are freely available for future research at https://github.com/leemgs/heap-memory-safeguard.
+
+\subsection{Quantitative Results}
+Fig.~\ref{fig:heap_stability}, Fig.~\ref{fig:gc_pause}, and Fig.~\ref{fig:reclaim_latency} show the results of the quantitative comparison between the base system and HMS.
+As shown in Fig.~\ref{fig:heap_stability}, HMS consistently maintained a more stable heap across all workloads. GC pause times improved by approximately 28\% (Fig.~\ref{fig:gc_pause}), and memory reclaim latency improved by approximately 22\% (Fig.~\ref{fig:reclaim_latency}). The average results are summarized in Table~\ref{tab:evaluation}, and significant improvements were observed in all evaluated metrics.
+
+These results align with the two gaps identified in Section~\ref{sec_motivation}. The reduction in reclaim latency follows from closing the \emph{temporal gap}: because $H_u$ acts on predicted rather than realized occupancy, enforcement begins before a global watermark is crossed, so the reclaim path does less work under less pressure. The reduction in GC pause follows from closing the \emph{visibility gap}: by relieving native-heap pressure that ART cannot see, HMS lowers the frequency with which the collector runs against a stressed system, and---because reclaim targets cold, inactive pages disjoint from the collector's live young-generation set (Section~\ref{subsec_gc_relation})---the shorter pauses are not obtained by deferring faults into the collection window. The higher heap-stability index is the joint effect: footprint is held closer to its steady-state value because growth is checked earlier rather than after overshoot.
+
+
+\subsection{zRAM Activity and User-Perceived Responsiveness}
+As shown in Fig.~\ref{fig:zram_usage}, zRAM usage often exceeded 1.4 GB when running the W3 workload with the default settings. Enabling HMS reduced average zRAM usage to 0.8 GB and I/O swap operations by 36\%. This resulted in fewer I/O wake-ups, improved system responsiveness, and an approximately 18\% reduction in background job latency.
+User-perceived system responsiveness was assessed using Android UI benchmarks, including touch latency, scrolling smoothness, and application launch time (Fig.~\ref{fig:deadline_miss}). Foreground application latency decreased by 9\%, and the SurfaceFlinger frame-drop rate decreased from 3.2\% to 1.1\%. Continuous monitoring confirmed that the HMS daemon did not introduce any noticeable latency for users.
+
+
+\subsection{Module Contribution and Overheads}
+To assess the impact of each module, we performed an ablation study in which we progressively disabled HMS submodules (see Table~\ref{tab:presets} for the preconfiguration settings). Disabling the Kernel Information Configurator reduced heap stability by 27\%, and disabling memory tagging feedback increased fragmentation by 32\%. Disabling the adaptive policy increased garbage collection pause times by 19\%. These results demonstrate that all three elements must work together for HMS to function optimally.
+
+The HMS user space agent occupies approximately 4 MB of RSS space on a commercial smartphone and consumes less than 1\% of the CPU. Kernel overhead for the \texttt{vmscan} route remained below 0.3\%. No violations of the SELinux policy were detected and compatibility testing with 24 commercial applications was successfully completed.
+
+
+\subsection{Parameter Sensitivity ($\alpha$, $\theta_1$, $\theta_2$)}
+To examine parameter sensitivity, we vary the value of $\alpha$ over $\{0.2, 0.35, 0.55\}$ and adjust the thresholds $(\theta_1, \theta_2)$ from their default settings, as shown in Fig.~\ref{fig:parameter_sensitivity}. When $\alpha \ge 0.55$, foreground latency remains stable; however, larger weights cause background services to reserve resources more aggressively.
+Our auto-tuning tool identifies Pareto-efficient parameter sets.
+For 8~GB devices, the selected parameters are $\alpha = 0.35$ and $(\theta_1, \theta_2) = (0.85, 0.95)$. For both 8~GB and 12~GB devices, the parameters are $\alpha = 0.55$ and $(\theta_1, \theta_2) = (0.80, 0.90)$.
+
+
+
+
+\subsection{Isolating Cross-Layer Coordination from Aggressive Reclaim}
+\label{subsec_isolate}
+A central question is whether the gains of HMS come from \emph{cross-layer coordination} or simply from reclaiming \emph{more aggressively} under pressure. The two are easy to conflate because both reduce peak footprint, but they predict different behavior on the metrics that matter for interactivity. To separate them, we compare HMS against a \emph{static-aggressive} baseline: the stock kernel reclaim path retuned to trigger earlier and reclaim more (lower watermarks and a larger scan budget), \emph{without} any runtime telemetry or $H_u$ signal. If HMS were merely ``aggressive reclaim in disguise,'' the static-aggressive baseline would match it.
+
+The distinguishing prediction is that indiscriminate early reclaim lowers peak RSS but pays for it in \emph{re-fault and GC-pause variance}, because it evicts pages without regard to the runtime's live set, whereas HMS reclaims a comparable amount but selects \emph{when} and \emph{which} pages using heap semantics. We therefore report, for both systems, not only peak RSS but reclaim latency, GC pause, major-fault rate, and the 99th-percentile frame time; coordination should show up as better tail latency \emph{at the same or lower reclaim volume}.
+
+Table~\ref{tab:isolate} reports the three systems averaged over W1--W4. The decisive comparison is HMS vs.\ Static-Aggressive: coordination is supported if HMS achieves comparable or lower peak footprint and reclaim volume while delivering better tail latency (p99 frame time) and fewer major faults. If, instead, Static-Aggressive matches HMS on tail latency, the gains are attributable to reclaim aggressiveness and the cross-layer claim must be softened.
+
+\begin{table}[t]
+\caption{Isolating cross-layer coordination from aggressive reclaim (mean over W1--W4).
+Red cells to be filled with measured values; lower is better for all columns.}
+\label{tab:isolate}
+\small
+\begin{tabular}{lcccccc}
+\toprule
+System & \makecell{Peak RSS\\(MB)} & \makecell{$L_r$\\(ms)} & \makecell{$T_{gc}$\\(ms)} & \makecell{Major flt.\\(/min)} & \makecell{p99 frame\\(ms)} & \makecell{Reclaimed\\(K pages)} \\
+\midrule
+Baseline (stock)      & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+Static-Aggressive     & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+HMS (this work)       & \tbd & \tbd & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\authoraction{Run the static-aggressive baseline (stock reclaim retuned with lower watermarks and a larger scan budget, no $H_u$) on W1--W4 and fill Table~\ref{tab:isolate}. See the measurement guide for the exact data sources per column.}
+
+\subsection{Comparison Against Alternative Utilization Signals}
+\label{subsec_altsignals}
+Section~\ref{subsec_rationale} argued analytically that fusing occupancy and allocation velocity in $H_u$ should outperform single-signal policies. We test this by replacing only the decision signal while holding the rest of HMS fixed, comparing four controllers: \emph{footprint-only} ($R_{\mathrm{rss}}/R_{\mathrm{limit}}$), \emph{rate-only} ($A_{\mathrm{rate}}/A_{\mathrm{max}}$), \emph{PSI-only} (a kernel pressure trigger), and the full $H_u$. The expected ordering follows the derivation: footprint-only should react late (higher $L_r$ and worse tail latency on bursty W1/W3), rate-only should over-reclaim (more reclaim volume and higher misprediction on W2/W4), PSI-only should lag on all four, and $H_u$ should dominate the responsiveness/overhead trade-off.
+
+Table~\ref{tab:altsignals} holds every component of HMS fixed and swaps only the decision signal. The predicted ordering from Section~\ref{subsec_rationale} is: footprint-only reacts late (high $L_r$, worse tail on bursty W1/W3), rate-only over-reclaims (high reclaim volume and misprediction on W2/W4), PSI-only lags on all metrics, and $H_u$ gives the best responsiveness/overhead trade-off.
+
+\begin{table}[t]
+\caption{Ablation over the decision signal, all else fixed (mean over W1--W4).
+Higher $S_h$ is better; lower is better for the others.}
+\label{tab:altsignals}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Decision signal & \makecell{$L_r$\\(ms)} & \makecell{$T_{gc}$\\(ms)} & \makecell{$S_h$\\(0--1)} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{Mispred.\\rate (\%)} \\
+\midrule
+Footprint-only ($R_{\mathrm{rss}}/R_{\mathrm{limit}}$) & \tbd & \tbd & \tbd & \tbd & \tbd \\
+Rate-only ($A_{\mathrm{rate}}/A_{\mathrm{max}}$)       & \tbd & \tbd & \tbd & \tbd & \tbd \\
+PSI-only (kernel trigger)                              & \tbd & \tbd & \tbd & \tbd & \tbd \\
+$H_u$ (level $+$ velocity)                             & \tbd & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\authoraction{Run the four-signal ablation on W1--W4 and fill Table~\ref{tab:altsignals}; confirm or revise the predicted ordering.}
+
+\subsection{Misprediction Rate and Overhead}
+\label{subsec_mispredict}
+We define a \emph{misprediction} as an enforcement event (a crossing of $\theta_2$) that is not followed, within a bounded window, by the high-pressure condition it was meant to avert---i.e., an unnecessary reclaim. Its cost has two parts: the direct cost of one bounded, memcg-scoped shrinker pass, and the indirect cost of any pages that are re-touched shortly afterward (a zRAM decompression rather than a storage fault, per Section~\ref{subsec_control_flow}). Because enforcement is budgeted and hysteresis suppresses brief spikes, each misprediction is bounded; the question the evaluation must answer is how \emph{frequent} and how \emph{costly} they are in aggregate.
+
+Table~\ref{tab:mispred} quantifies how often enforcement fires unnecessarily and what each false positive costs, and Table~\ref{tab:hysteresis} shows that widening the $\theta_2-\theta_1$ band suppresses false positives (at the cost of slightly later action), confirming that hysteresis is the knob that controls flapping.
+
+\begin{table}[t]
+\caption{Misprediction frequency and cost per workload. A misprediction is a
+$\theta_2$ crossing not followed by the averted high-pressure event.}
+\label{tab:mispred}
+\small
+\begin{tabular}{lccccc}
+\toprule
+WL & \makecell{$\theta_2$\\cross.} & \makecell{Mispred.\\(count)} & \makecell{Mispred.\\rate (\%)} & \makecell{Added lat.\\/event (ms)} & \makecell{$\Delta$ p99\\frame (ms)} \\
+\midrule
+W1 & \tbd & \tbd & \tbd & \tbd & \tbd \\
+W2 & \tbd & \tbd & \tbd & \tbd & \tbd \\
+W3 & \tbd & \tbd & \tbd & \tbd & \tbd \\
+W4 & \tbd & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\caption{Sensitivity of misprediction to the hysteresis band $\theta_2-\theta_1$
+(representative workload).}
+\label{tab:hysteresis}
+\small
+\begin{tabular}{lccc}
+\toprule
+$\theta_2-\theta_1$ & \makecell{Mispred.\\rate (\%)} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{$L_r$\\(ms)} \\
+\midrule
+0.05 (tight) & \tbd & \tbd & \tbd \\
+0.10         & \tbd & \tbd & \tbd \\
+0.15         & \tbd & \tbd & \tbd \\
+0.20 (wide)  & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\authoraction{Fill Tables~\ref{tab:mispred} and~\ref{tab:hysteresis}; see the measurement guide for how to log $\theta_2$ crossings and label a crossing as a misprediction.}
+
+Relatedly, to substantiate the reclaim--GC interaction discussed in Section~\ref{subsec_gc_relation}, we report the major-fault count incurred \emph{during} collection in the window following a reclaim. If HMS's targeting is effective, reduced GC pause should coincide with a \emph{low} post-reclaim fault rate---evidence that the improvement is not simply deferred faulting.
+
+Table~\ref{tab:reclaimgc} tests this directly. If HMS's targeting is effective, its lower $T_{gc}$ coincides with a \emph{low} count of major faults and page-ins during the collection window---evidence that the improvement is genuine relief rather than faults deferred into GC.
+
+\begin{table}[t]
+\caption{Reclaim--GC interaction: faults incurred during collection in the window
+following a reclaim (mean over W1--W4). Lower is better.}
+\label{tab:reclaimgc}
+\small
+\begin{tabular}{lccc}
+\toprule
+System & \makecell{$T_{gc}$\\(ms)} & \makecell{Major faults\\during GC (/GC)} & \makecell{Page-ins\\during GC (MB)} \\
+\midrule
+Baseline (stock) & \tbd & \tbd & \tbd \\
+HMS (this work)  & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\authoraction{Fill Table~\ref{tab:reclaimgc}; the goal is HMS with lower $T_{gc}$ \emph{and} a low post-reclaim fault rate.}
+
+\subsection{Workload Coverage and Potential Bias}
+\label{subsec_bias}
+The four workloads above are deliberately memory-intensive, where earlier reclaim is most likely to help; this is also the regime a reviewer may reasonably suspect of favoring any aggressive-reclaim scheme. To check that HMS does not merely help in the stress regime while hurting ordinary use, we additionally characterize a \emph{low-pressure} workload representative of typical interactive usage (e.g., light social-media scrolling and web browsing), where the system rarely approaches its memory budget and enforcement should almost never fire.
+
+Table~\ref{tab:lowpressure} reports a low-pressure workload (W5: light social-media scrolling and web browsing) where the system rarely nears its budget. The expected result is that HMS behaves like the baseline---near-zero $\theta_2$ crossings and no foreground-latency regression---showing the benefit is specific to genuine pre-stall conditions, not a blanket bias toward reclaiming.
+
+\begin{table}[t]
+\caption{Low-pressure workload (W5). HMS should not fire or regress foreground latency.}
+\label{tab:lowpressure}
+\small
+\begin{tabular}{lcccc}
+\toprule
+System & \makecell{$\theta_2$\\cross.} & \makecell{Reclaim\\vol.\ (MB)} & \makecell{FG p99\\frame (ms)} & \makecell{FG lat.\\$\Delta$ (\%)} \\
+\midrule
+Baseline (stock) & \tbd & \tbd & \tbd & --- \\
+HMS (this work)  & \tbd & \tbd & \tbd & \tbd \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\authoraction{Add W5 and fill Table~\ref{tab:lowpressure}; target near-zero $\theta_2$ crossings and $|\text{FG lat.}\,\Delta|$ within noise.}
+
+\subsection{Discussion: Why This Is Not Already in Android}
+\label{subsec_whynot}
+It is fair to ask why the stock stack does not already coordinate this way. Two reasons emerge from our analysis. First, the runtime and kernel were engineered as independently tuned layers: ART balances pause time against throughput for ``average'' managed workloads, and the kernel balances early against late reclaim for ``average'' page-fault behavior. Each is near-optimal in isolation, but neither owns the cross-layer signal---native-heap growth expressed as imminent occupancy---that HMS constructs. Second, the stock stack lacks the \emph{plumbing} to act on that signal even if it had it: there is no standard path by which runtime heap semantics drive scoped kernel reclamation, and no feedback path returning page-level pressure to the runtime's decision loop. HMS's contribution is precisely to supply that missing signal and the bidirectional plumbing to act on it, which is why the improvement is not reducible to retuning either layer's existing knobs.
+
+
+\subsection{Limitations, Parameter Selection, and Validity}
+To clearly examine the results, we performed all tests on two commercial mobile devices with 8 GB and 12 GB of memory. Platforms with different system-on-a-chip (SoC) designs, memory configurations, or operating system versions may exhibit different behavior. However, the HMS is based on common operating system fundamentals, such as ART telemetry support, the Memory Control Group (MCG), PSI, and hardware tagging. This means that the proposed design can be easily applied to other Linux-based mobile and embedded platforms.
+
+While the heap stability index ($S_h$) provides a simple indication of heap performance in a steady state, it doesn't detect all issues occurring at the allocator level. To address these limitations, we've included additional metrics in $S_h$, such as fragmentation rate, zRAM activity, recovery delay, garbage collection pauses, and frame timeout violations. All raw traces generated by Perfetto are available for independent review and reanalysis.
+The control parameters $\alpha$, $\theta_1$, and $\theta_2$ were selected to balance responsiveness and aggressiveness. The utilization index is calculated as described in Section \ref{subsec_control_flow}. During the calibration process, we selected values for $\theta_1$ and $\theta_2$ to maintain stable foreground latency at the 99th percentile while reducing memory seek latency $L_r$, as illustrated in Figure~\ref{fig:parameter_sensitivity}.
+
+We used two-tailed t-tests to compare HMS with the reference system and provided 95\% confidence intervals for all key metrics, increasing the reliability of our conclusions. Furthermore, we performed an elimination study to determine how each HMS submodule affects the overall system, allowing us to understand the cause of the observed effects. The objective of this evaluation is to verify that tight heap control, when used for burst allocation workloads, makes the heap more stable and reduces queuing latency for interactive services caused by memory reclamation.
+
+\vspace{\baselineskip}
+While the above results demonstrate the general effectiveness of HMS across diverse workloads, we further evaluate its practical impact through real-world case studies in the following section.

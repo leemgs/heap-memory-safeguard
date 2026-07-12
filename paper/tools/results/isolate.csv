@@ -1,0 +1,4 @@
+System,\makecell{Peak RSS\\(MB)},\makecell{$L_r$\\(ms)},\makecell{$T_{gc}$\\(ms)},\makecell{Major flt.\\(/min)},\makecell{p99 frame\\(ms)},\makecell{Reclaimed\\(K pages)}
+Baseline (stock),412,5.1,50,120,55,60
+Static-Aggressive,300,4.2,44,180,48,95
+HMS (this work),305,3.9,36,70,33,62

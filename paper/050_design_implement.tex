@@ -1,0 +1,238 @@
+\section{HMS: Design and Implementation}
+\label{sec_hms}
+We introduce \textbf{Heap Memory Safeguard (HMS)}, a system that combines a timing plane aware of heap conditions, dynamic memory reclamation managed by the kernel, and safety signals provided by the hardware. Prior methodologies have demonstrated that memory scheduling on a singular memory layer cannot completely eliminate latency spikes and variability on mobile devices~\cite{TCE_Lim2013_VMP, TC_10045641}. In the background, HMS checks the heap usage of each process from time to time and determines if it is growing too quickly. If the heap usage is growing too quickly, HMS either reclaims memory from the process or limits its usage to prevent critical memory issues. The design key of \textit{HMS} is based on four rules: being clear, being flexible, having as little overhead as possible, and having close, co-designed multi-layer coordination.
+
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=0.85\linewidth]{./fig1_hms_architecture.png}
+  \caption{System architecture of HMS on Android. 
+  The framework brings together a Runtime Observer (user space), 
+  a Kernel Enforcer (kernel space), and a memory tagging/MTE/memcg 
+  feedback interface (hardware layer). 
+  These modules communicate bidirectionally for telemetry and control.}
+  \label{fig:hms_architecture}
+\end{figure}
+ 
+
+
+\begin{table}[t]
+\caption{Notation used in this paper.}
+\centering
+\begin{tabular}{ll}
+\hline
+$S_h$ & Heap stability index (steady/peak) \\
+$L_r$ & Reclaim latency \\
+$T_{gc}$ & Garbage collection pause time \\
+$H_u$ & Heap utilization index \\
+$R_{\mathrm{rss}}$ & Resident set size of a process \\
+$R_{\mathrm{limit}}$ & Memory limit enforced by the memory cgroup \\
+$A_{\mathrm{rate}}$ & Instantaneous heap allocation rate \\
+$A_{\mathrm{max}}$ & Maximum observed allocation rate (normalization factor) \\
+$\alpha$ & Allocation-velocity weight in $H_u$ \\
+$\theta_1,\theta_2$ & Instability and enforcement thresholds \\
+\hline
+\end{tabular}
+\label{tab:notation}
+\end{table}
+
+
+
+\begin{figure}[t]
+  %\captionsetup{justification=centering}
+  \centering
+\includegraphics[width=0.70\linewidth,height=0.30\textheight,keepaspectratio]{./fig2_heap_stability.png}
+  \caption{Heap stability $S_h$ across workloads (higher is better).}
+  \label{fig:heap_stability}
+\end{figure}
+
+\begin{figure}[t]
+  %\captionsetup{justification=centering}
+  \centering
+\includegraphics[width=0.70\linewidth,height=0.30\textheight,keepaspectratio]{./fig3_gc_pause.png}
+  \caption{GC pause $T_{gc}$ across workloads (lower is better).}
+  \label{fig:gc_pause}
+\end{figure}
+
+\begin{figure}[t]
+  %\captionsetup{justification=centering}
+  \centering
+\includegraphics[width=0.65\linewidth,height=0.20\textheight,keepaspectratio]{./fig4_reclaim_latency.png}
+  \caption{Reclaim latency $L_r$ across workloads (lower is better).}
+  \label{fig:reclaim_latency}
+\end{figure}
+
+
+\begin{figure}[t]
+  %\captionsetup{justification=centering}
+  \centering
+\includegraphics[width=0.67\linewidth,height=0.20\textheight,keepaspectratio]{./fig5_zram_usage.png}
+  \caption{Measured zRAM usage across workloads (lower is better), reported as a secondary metric to support the primary performance results.}
+  \label{fig:zram_usage}
+\end{figure}
+
+
+%=======≈==============================
+
+
+\begin{table}[t]
+\centering
+\scriptsize
+\caption{Performance Comparison of Baseline vs HMS.}
+\label{tab:evaluation}
+\begin{tabular}{lccc}
+\hline
+\textbf{Metric} & \textbf{Baseline} & \textbf{HMS} & \textbf{Improvement} \\
+\hline
+Heap stability ($S_h$) & 0.67 & 0.93 & +38\% \\
+Reclaim latency ($L_r$) & 152\,ms & 118\,ms & --22\% \\
+GC pause ($T_{gc}$) & 21.4\,ms & 15.3\,ms & --28\% \\
+Peak RSS (MB) & 512 & 302 & --41\% \\
+\hline
+\end{tabular}
+
+\footnotesize{Peak RSS is measured as the maximum resident set size of the target application process during the execution window.}
+\end{table}
+
+
+%=======≈==============================
+\begin{table}[t]
+\centering
+\caption{Recommended presets by device class.}
+\label{tab:presets}
+\begin{tabular}{lccc}
+\hline
+\textbf{RAM Tier} & $\alpha$ & $\theta_1$ & $\theta_2$ \\
+\hline
+8\,GB  & 0.35 & 0.85 & 0.95 \\
+12\,GB & 0.55 & 0.80 & 0.90 \\
+\hline
+\end{tabular}
+\end{table}
+
+
+
+%======================================
+
+\begin{figure}[t]
+  \centering
+\includegraphics[width=0.70\linewidth,height=0.20\textheight,keepaspectratio]{./fig6_deadline_miss.png}
+  \caption{Measured SurfaceFlinger deadline miss ratio across workloads (higher is better), which closely correlates with the frame drop rate.}
+
+  \label{fig:deadline_miss}
+\end{figure}
+
+
+%======================================
+   
+\begin{figure*}[t]
+\centering
+% ---- Row 1 (2 subfigures) ----
+\begin{subfigure}{0.42\textwidth}\centering
+  \includegraphics[width=\linewidth]{fig9_W1_alpha_vs_Sh_3alpha.png}
+  \caption{W1 -- $\alpha$ vs.\ heap stability ($S_h$)}
+  \label{fig:w1_alpha}
+\end{subfigure}\hspace{0.04\textwidth}
+\begin{subfigure}{0.42\textwidth}\centering
+  \includegraphics[width=\linewidth]{fig9_W2_theta1_vs_Lr.png}
+  \caption{W2 -- $\theta_1$ vs.\ reclaim latency ($L_r$)}
+  \label{fig:w2_theta1}
+\end{subfigure}
+
+\vspace{0.8em}
+% ---- Row 2 (2 subfigures) ----
+\begin{subfigure}{0.42\textwidth}\centering
+  \includegraphics[width=\linewidth]{fig9_W3_theta2_vs_Sh.png}
+  \caption{W3 -- $\theta_2$ vs.\ heap stability ($S_h$)}
+  \label{fig:w3_theta2_sh}
+\end{subfigure}\hspace{0.04\textwidth}
+\begin{subfigure}{0.42\textwidth}\centering
+  \includegraphics[width=\linewidth]{fig9_W4_theta2_vs_Lr.png}
+  \caption{W4 -- $\theta_2$ vs.\ reclaim latency ($L_r$)}
+  \label{fig:w4_theta2_lr}
+\end{subfigure}
+
+\caption{Parameter sensitivity across devices and workloads (W1--W4),
+showing the effect of $\alpha$, $\theta_1$, and $\theta_2$ on heap stability ($S_h$)
+and reclaim latency ($L_r$).}
+\label{fig:parameter_sensitivity}
+\end{figure*}
+
+
+ 
+
+
+\subsection{System Architecture}
+As shown in Fig.~\ref{fig:hms_architecture}, HMS is organized as three closely cooperating layers. Each layer is described below in terms of \emph{what it does}, \emph{how it differs from prior runtime- or kernel-only mechanisms}, and \emph{its cost}.
+
+\textbf{\ding{182} Runtime Observer (User-space Agent).}
+The Observer runs as a privileged service inside \texttt{system\_server}. It fuses three sources into a single per-process record: (i) managed-heap telemetry from ART (used space, free ratio, allocation counters, and GC start/end events) obtained through the \texttt{GCGuard} API; (ii) native-heap behavior sampled by \texttt{heapprofd}; and (iii) resident and proportional set sizes (RSS/PSS) read from \texttt{/proc/\$pid/smaps}. To bound overhead, the Observer does not instrument every allocation: \texttt{heapprofd} is configured for \emph{sampled} allocation profiling at a byte-interval, and the aggregate control cycle runs at 1~Hz by default (Section~\ref{subsec_control_flow}), with \texttt{smaps} parsing restricted to the set of tracked UIDs so that its cost stays proportional to the number of monitored processes rather than to system-wide VMAs. The key departure from prior work is scope: runtime-only GC tuners~\cite{TC_10045641,TCE_Yan2019_FileAwareGC} observe only managed objects and are blind to native growth, whereas kernel-only monitors observe pages but discard heap-level semantics; the Observer is the first component to co-locate managed, native, and kernel pressure signals in one record so that the \emph{visibility gap} of Section~\ref{sec_motivation} is closed at the point of decision. Measured cost is modest: the agent occupies roughly 4~MB RSS and consumes under 1\% of one CPU.
+
+\textbf{\ding{183} Kernel Enforcer (Driver Module).}
+The Enforcer is a lightweight kernel module that extends existing \texttt{vmscan} hooks into the memcg shrinker mechanism and exposes a control surface at \texttt{/sys/kernel/HMS/thresholds}. When the Observer decides that a process must shed memory, it issues an \texttt{ioctl} carrying the target memcg and a page budget derived from the $H_u$ overshoot (Section~\ref{subsec_rationale}). The Enforcer then performs a \emph{targeted} shrinker pass scoped to that memcg: it walks the inactive LRU first, prefers cold anonymous pages (which are compressed into zRAM) and clean file-backed pages, and stops once the budget is met. Two properties distinguish this from conventional kernel reclaim triggered by global watermarks~\cite{TC_9513533,TC_10851391}. First, the trigger is \emph{externally supplied} by runtime-level heap semantics rather than inferred from kernel-internal pressure, so reclamation can begin \emph{before} a global low-memory watermark is crossed. Second, reclamation is \emph{scoped and bounded}: it targets only the memcg flagged as unstable and reclaims only up to the computed budget, rather than reclaiming globally and indiscriminately. The added cost on the \texttt{vmscan} path stays below 0.3\%.
+
+\textbf{\ding{184} Feedback Interface (Memcg/Tagging Bridge).}
+The third component closes the loop in the kernel$\rightarrow$runtime direction. It registers on standard memcg \texttt{memory.events} counters and on kernel Pressure Stall Information (PSI) triggers, and it surfaces MTE fault/tag activity as an auxiliary stress indicator. When the kernel crosses a configured pressure level, an \texttt{eventfd} notification wakes the Observer, which reconciles the page-level signal with its heap-level record and updates $H_u$ and the adaptive thresholds accordingly. Concretely, this means that page-level stress that the runtime cannot see on its own---for example, pressure originating in shared native mappings---is fed back into the same decision loop that drives enforcement, so that the runtime and kernel converge on a consistent view instead of reacting independently. This bidirectional coupling is what makes HMS a coordinated control loop rather than a one-way monitor.
+
+\subsection{Design Rationale and Derivation of $H_u$}
+\label{subsec_rationale}
+The central design decision in HMS is \emph{what to measure} in order to intervene neither too early nor too late. HMS uses the heap-utilization index
+\[
+H_u \;=\; \underbrace{\frac{R_{\mathrm{rss}}}{R_{\mathrm{limit}}}}_{\text{occupancy (level)}} \;+\; \alpha\,\underbrace{\frac{A_{\mathrm{rate}}}{A_{\mathrm{max}}}}_{\text{velocity (derivative)}} ,
+\]
+which deliberately combines a \emph{level} term and a \emph{rate} term. The rationale is that the quantity that actually predicts an imminent stall is not current occupancy but the \emph{time remaining until the memory budget is exhausted}. Writing occupancy as $u(t)=R_{\mathrm{rss}}/R_{\mathrm{limit}}$ and taking a first-order extrapolation over a short horizon $\Delta$,
+\[
+u(t+\Delta)\;\approx\;u(t)+\Delta\,u'(t),\qquad u'(t)\;\propto\;\frac{A_{\mathrm{rate}}}{R_{\mathrm{limit}}},
+\]
+so a predicted-occupancy trigger has exactly the form $u(t) + (\text{const})\cdot A_{\mathrm{rate}}$. Normalizing the rate by $A_{\mathrm{max}}$ and folding $\Delta$ into the weight $\alpha$ recovers $H_u$. Under this reading $H_u$ is not an arbitrary heuristic but a lightweight, normalized \emph{one-step-ahead occupancy predictor}: $\alpha$ sets the prediction horizon, i.e., how far ahead the controller looks. Foreground applications use a smaller $\alpha$ so that short, self-correcting allocation bursts are not mistaken for sustained growth, while background services use a larger $\alpha$ so that early reclaim is favored when responsiveness matters less.
+
+This derivation also explains why simpler, single-signal policies are insufficient, and motivates the alternatives we compare against in Section~\ref{sec_eval}:
+\begin{itemize}
+  \item \textbf{Footprint-only} ($H_u=R_{\mathrm{rss}}/R_{\mathrm{limit}}$) is purely reactive. It fires only once occupancy is already high and therefore reproduces the \emph{temporal gap}: a process that is only moderately full but allocating rapidly overshoots before the trigger fires.
+  \item \textbf{Rate-only} ($H_u=A_{\mathrm{rate}}/A_{\mathrm{max}}$) reacts to \emph{every} burst regardless of headroom, so it reclaims even when ample budget remains, wasting work and inflating misprediction.
+  \item \textbf{Pressure-only} (a kernel PSI/watermark trigger) is both lagging---by the time PSI rises the stall has begun---and semantically blind, since it cannot attribute pressure to a specific heap or process.
+\end{itemize}
+Fusing level and velocity is what lets a single scalar separate transient bursts (high rate, low occupancy: safe to ignore) from genuine pre-stall conditions (rising occupancy \emph{and} rate). The two thresholds provide hysteresis: crossing $\theta_1$ marks a process ``unstable'' (soft watch) and crossing $\theta_2$ triggers enforcement. The band $\theta_2-\theta_1$ deliberately separates observation from action so the controller does not oscillate around a single boundary, which directly bounds misprediction-driven flapping.
+
+\subsection{Control Flow and Operation}
+\label{subsec_control_flow}
+HMS exposes a small set of configurable thresholds and weights to balance responsiveness against reclaim aggressiveness. In our prototype $\alpha=0.35$ for foreground applications and $0.55$ for background services; the thresholds $\theta_1$ and $\theta_2$ determine when a process is tagged ``unstable'' and when reclamation begins. These parameters are tunable per device via \texttt{/sys/kernel/HMS/thresholds} or per UID via memcg settings, and persist across reboots. Each observation cycle (default: 1~second) has five phases:
+\begin{enumerate}
+  \item \textbf{Monitoring:} gather ART heap statistics (\texttt{used\_space}, \texttt{free\_ratio}), native-heap RSS, and kernel PSI metrics.
+  \item \textbf{Analysis:} compute the normalized utilization index $H_u$.
+  \item \textbf{Prediction:} if $H_u>\theta_1$, flag the process ``unstable''; if $H_u>\theta_2$, schedule reclaim.
+  \item \textbf{Enforcement:} issue an \texttt{ioctl} to the Kernel Enforcer to run a bounded, memcg-scoped shrinker pass, prioritizing inactive pages, thereby limiting latency variance~\cite{TCE_Lim2013_VMP}.
+  \item \textbf{Feedback:} record reclaim latency and GC pause, and update thresholds by exponential smoothing.
+\end{enumerate}
+
+\noindent\textbf{Handling mispredictions.}
+Because prediction is inherently imperfect, HMS is designed so that a false positive---an enforcement that turns out to have been unnecessary---is cheap and self-limiting. Three mechanisms bound its cost. First, the $\theta_1/\theta_2$ hysteresis band suppresses reclaim on brief spikes that fall back below $\theta_1$ within a cycle. Second, enforcement is capped by a per-invocation page budget, so a single misprediction costs at most one bounded shrinker pass rather than an unbounded eviction. Third, because reclaimed anonymous pages are compressed into zRAM rather than dropped, a page that is touched again shortly after an unnecessary reclaim incurs only a decompression, not a storage fault. The exponential smoothing in the feedback phase further damps repeated false triggers by raising the effective threshold for a process that was recently reclaimed without benefit. We quantify how often mispredictions occur and their measured latency cost in Section~\ref{sec_eval}.
+
+\subsection{Relationship to Garbage Collection}
+\label{subsec_gc_relation}
+A natural question is whether simply triggering a garbage collection could serve the same role as kernel reclaim. The two operate on different resources and are complementary rather than interchangeable. A GC compacts the managed heap and returns freed regions to ART's internal free-lists, which can relieve \emph{managed-heap} pressure and reduce the frequency of future collections. However, a GC does not, in general, \texttt{munmap} or return physical pages to the kernel---it repurposes freed regions \emph{within} the managed heap---so it does not reduce system-wide physical pressure or native RSS. More importantly, the dominant growth we observe in Section~\ref{sec_motivation} occurs in the \emph{native} heap, which the collector cannot touch at all. Kernel reclaim is therefore required precisely for the visibility-gap case that motivates HMS. HMS still uses collection opportunistically: during rendering-idle windows it can request a runtime GC to relieve managed pressure cheaply (Section~\ref{sec_case}), but it relies on the Kernel Enforcer for physical relief.
+
+This design also bounds the well-known risk that reclaim evicts pages the collector will soon touch, penalizing the next GC. HMS reduces this coupling in two ways. First, the Enforcer targets the \emph{inactive} LRU and cold anonymous or clean file pages, whereas ART's live working set is concentrated in the young generation and recently allocated regions, which sit on the \emph{active} LRU; the reclaim set and the GC scan set therefore rarely intersect. Second, evicted anonymous pages are zRAM-backed, so an unexpected re-touch during collection resolves as a decompression rather than a disk fault. We report the supporting metric---major faults incurred during collection following a reclaim---in Section~\ref{sec_eval}, where reduced GC pause is shown to coincide with a low post-reclaim fault rate rather than with deferred faulting.
+
+\subsection{Page Reclamation Policy}
+HMS applies one of two policies depending on workload class:
+\begin{itemize}
+  \item \textbf{Latency-Sensitive Mode:} for a foreground application that is idle while still holding a wake lock, HMS reclaims only a small set of inactive anonymous pages, following the fast, low-footprint reclaim strategy of~\cite{TCE_Lim2013_VMP}.
+  \item \textbf{Throughput-Oriented Mode:} for a demanding background service performing intensive computation, HMS reclaims a larger budget, following~\cite{TCE_Hwang2012_CompressedSwap}.
+\end{itemize}
+
+\subsection{Integration with Android~(API~35) Components}
+HMS is designed to work with existing Android components without requiring changes to user applications:
+\begin{enumerate}
+  \item \textbf{ART Integration:} heap-usage metrics are collected through existing runtime telemetry, allowing non-intrusive monitoring of GC activity.
+  \item \textbf{memcg Integration:} the system uses standard \texttt{memory.events} counters and per-UID cgroup limits for targeted reclamation~\cite{TC_10851391}.
+  \item \textbf{Configuration:} all control settings are handled via \texttt{sysfs} and persist across reboots, enabling device-specific optimization.
+\end{enumerate}
+
+\vspace{\baselineskip}
+In summary, the key strengths of the HMS design are:
+\begin{itemize}
+  \item \textbf{Unified visibility:} HMS fuses runtime and kernel data for a more complete view of heap activity, closing the visibility gap.
+  \item \textbf{Proactive, predictive control:} the $H_u$ level-plus-velocity signal acts before pressure escalates, closing the temporal gap while avoiding indiscriminate reclaim.
+  \item \textbf{Low, bounded overhead:} sampled telemetry and budgeted, scoped reclaim keep user-perceived impact minimal and misprediction cheap.
+  \item \textbf{Scalability:} per-UID cgroup management supports heterogeneous SoCs and concurrent workloads~\cite{TCE_Goswami2024_ResourceAlloc}.
+\end{itemize}

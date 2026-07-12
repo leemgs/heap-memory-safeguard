@@ -1,0 +1,56 @@
+%% ACM Transactions on Embedded Computing Systems (TECS)
+%% Small Standard Format (acmsmall) submission version.
+%% Converted from the original IEEEtran manuscript.
+\documentclass[acmsmall,review,nonacm=false]{acmart}
+
+%% ---- Journal metadata (TECS) ----
+\acmJournal{TECS}
+\acmYear{2026}
+\acmVolume{0}
+\acmNumber{0}
+\acmArticle{0}
+\acmMonth{0}
+%% For a submission, DOI/ISBN/price are assigned by ACM; defaults are fine.
+
+%% Numeric citations (ACM small standard uses numbered references).
+\citestyle{acmnumeric}
+
+%% ---- Packages not already provided by acmart ----
+\usepackage{pifont}      % \ding{...} symbols
+\usepackage{makecell}    % \makecell in tables
+\usepackage{subcaption}  % subfigures
+% Note: acmart already provides amsmath, amssymb, graphicx, booktabs,
+% xcolor, hyperref, url, caption, and natbib. Do not re-load these.
+
+%% ---- Helper macros ----
+% Visible note for items that still require a measurement before submission.
+% These MUST be resolved (numbers inserted, note removed) prior to submission.
+\newcommand{\authoraction}[1]{\textcolor{red}{\textbf{[AUTHOR ACTION: #1]}}}
+% Placeholder for a table cell whose value must still be measured (renders as a red dash).
+\newcommand{\tbd}{\textcolor{red}{\textbf{--}}}
+\newcommand{\RUNTIME}{modern runtime}
+
+\begin{document}
+
+%% ---- Front matter (must precede \maketitle in acmart) ----
+\input{./001_title.tex}
+\input{./005_author.tex}
+\input{./010_abstract.tex}   % abstract + CCS concepts + keywords
+
+\maketitle
+
+%% ---- Body ----
+\input{./020_introduction.tex}
+\input{./040_background.tex}
+\input{./045_motivation_observation.tex}
+\input{./050_design_implement.tex}
+\input{./065_evaluation.tex}
+\input{./067_case_study.tex}
+\input{./070_related_work.tex}
+\input{./085_conclusion.tex}
+
+%% ---- References ----
+\bibliographystyle{ACM-Reference-Format}
+\bibliography{reference-data}
+
+\end{document}

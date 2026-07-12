@@ -1,0 +1,29 @@
+\section{Motivation and Observations}
+\label{sec_motivation}
+
+Newer Android systems feature a complex runtime, memory management that changes based on the hardware, and protection that is built into the hardware. But there are still some challenges with handling workloads that use a lot of memory on smartphones and other mobile devices. 
+In this part, we explain why proactive heap management is important and briefly review a real-world example that illustrates a problem with the current Android memory stack structure.
+
+\subsection{Asymmetric Heap Visibility}
+Our observations suggest that one key issue is that managed and unmanaged heaps can perceive each other differently. The Android Runtime (ART) efficiently manages Java objects, but it fails to track native allocations performed by C/C++ components running on the device, such as the media framework, graphics engine, and AI runtime. Similar visibility gaps have existed in mobile systems, where kernel- or library-level allocations do not adhere to higher-level management standards~\cite{TC_9513533}. 
+
+To observe the memory interactions between the runtime, kernel, and hardware layers and the impact of memory protection mechanisms in a real-world mobile environment, we performed mixed-modality workloads, including camera, neural network inference, and user interface generation, on an Android smartphone-based development device equipped with 8GB LPDDR5X memory and Linux 6.6. The native heap grew from 420 MB to 1.4 GB in less than 45 seconds. The Java heap remained at 512 MB. The kernel's \texttt{memcg} counter increased resident memory by up to 226\%, despite virtually no change in runtime-reported heap usage. This resulted in excessive compressed swap activity, delaying garbage collection until memory was reclaimed. This data demonstrates that runtime accounting information alone is insufficient to accurately assess actual heap load. This trend has been consistently observed across previous studies targeting mobile platforms~\cite{TCE_Lim2013_VMP}.
+
+
+\subsection{Reactive Rather Than Preventive Policies}
+The memory controllers for both the runtime and the kernel largely respond to events. 
+When the kernel perceives memory pressure at the page level, it starts to reclaim memory. When generation thresholds are crossed, ART merely starts garbage collection~\cite{TC_10045641}. 
+Our analysis revealed that the heap size had already grown by more than 3.4 GB before any Garbage Collector (GC) or memory reclamation operations occurred. Furthermore, zRAM usage increased and frame rates decreased when GC pause times exceeded the interaction latency limit~\cite{TCE_Hwang2012_CompressedSwap, TC_10851391}.
+ 
+\subsection{Fragmentation and Allocator Contention}
+From our observations, heap fragmentation in the native allocator resulted in a noticeable performance degradation even when there was sufficient available memory.
+The native allocator's fragmentation ratios were more than 35\%, and it took several milliseconds to allocate pages. 
+Although ART's compaction collector helps address this issue by preventing excessive fragmentation of the managed heap, other memory regions at the native level are generally not compactible. Especially for heterogeneous workloads, fragmentation of the heap memory space further increases memory reclamation overhead and degrades responsiveness. ~\cite{TC_9513533, TCE_Shin2010_FTL}.
+
+\subsection{Lack of Cross-Layer Coordination}
+Because the runtime, kernel, and hardware layers each have their own unique memory policies, these policies are not always coordinated. Coordination flaws in memory management policies across layers arise because the controllers at each layer fail to operate~\cite{TCE_Goswami2024_ResourceAlloc}. Our trace analysis revealed that kernel load remained high for several seconds before the runtime intervened, despite the presence of reclaimable memory. This indicates that the layers were not properly synchronized temporally.
+
+\vspace{\baselineskip}
+The observations above suggest that the Android memory subsystem exhibits two structural problems. 
+First, a \emph{visibility gap} exists in which the ART runtime is not aware of native heap growth until a physical memory demand is made~\cite{TCE_Lim2013_VMP}. 
+Second, a \emph{temporal gap} arises because the ART runtime and the kernel controller do not always respond simultaneously, which can structurally delay process operations or lead to unnecessary memory management~\cite{TC_10045641}.

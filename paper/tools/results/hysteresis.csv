@@ -1,0 +1,5 @@
+$\theta_2-\theta_1$,\makecell{Mispred.\\rate (\%)},\makecell{Reclaim\\vol.\ (MB)},\makecell{$L_r$\\(ms)}
+0.05 (tight),,,
+0.10,,,
+0.15,,,
+0.20 (wide),,,
