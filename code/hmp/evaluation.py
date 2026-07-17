@@ -8,9 +8,7 @@ def _heap_stability(rss):
     m = np.mean(rss) + 1e-6
     return float(np.clip(1.0 - (np.std(rss) / m), 0.0, 1.0))
 
-def _simulate_series(workload_fn, controller: HMPController | None):
-    tel = Telemetry()
-    trace = workload_fn()
+def _simulate_series(trace, controller: HMPController | None, rng):
     dt = trace['dt']
     rss_hist = []
     Lr_list, Tgc_list, Eo_list = [], [], []
@@ -22,17 +20,17 @@ def _simulate_series(workload_fn, controller: HMPController | None):
         rss_hist.append(state['rss'])
         if controller is None:
             # baseline: no control, slight random reclaim
-            Lr = 80 + 140 * min(1.0, state['rss']/1024.0) + 10 * np.random.rand()
-            Tgc = 21.0 + 6.0 * np.random.rand()
+            Lr = 80 + 140 * min(1.0, state['rss']/1024.0) + 10 * rng.random()
+            Tgc = 21.0 + 6.0 * rng.random()
             Eo = 0.0
-            rss_series.append(state['rss'] + np.random.normal(0, 2.0))
+            rss_series.append(state['rss'] + rng.normal(0, 2.0))
         else:
             info = controller.step(state, np.array(rss_hist[-45:]))
             Lr, Tgc, Eo = info['Lr_ms'], info['Tgc_ms'], info['Eo_W']
             # apply rate multiplier to allocation -> lower rss growth
             delta = (state['alloc_rate'] - state['free_rate']) * dt
             delta *= info['rate_mul']
-            new_rss = max(40.0, (rss_series[-1] if rss_series else state['rss']) + delta + np.random.normal(0,1.0))
+            new_rss = max(40.0, (rss_series[-1] if rss_series else state['rss']) + delta + rng.normal(0,1.0))
             rss_series.append(new_rss)
 
         Lr_list.append(Lr); Tgc_list.append(Tgc); Eo_list.append(Eo)
@@ -51,12 +49,16 @@ def run_all(alpha=0.35, theta1=0.12, theta2=0.18, rss_limit_mb=1024.0, seed=7):
         "W3": Telemetry(seed=seed+2).workload_w3,
         "W4": Telemetry(seed=seed+3).workload_w4,
     }
-    ctrl = HMPController(alpha=alpha, theta1=theta1, theta2=theta2, rss_limit_mb=rss_limit_mb)
-
     rows = []
-    for name, fn in workloads.items():
-        base = _simulate_series(fn, controller=None)
-        hmp = _simulate_series(fn, controller=ctrl)
+    for index, (name, fn) in enumerate(workloads.items()):
+        # Independent, repeatable noise streams and controller state per workload.
+        trace = fn()
+        base = _simulate_series(trace, controller=None,
+                                rng=np.random.default_rng(seed + 100 + index))
+        ctrl = HMPController(alpha=alpha, theta1=theta1, theta2=theta2,
+                             rss_limit_mb=rss_limit_mb)
+        hmp = _simulate_series(trace, controller=ctrl,
+                               rng=np.random.default_rng(seed + 200 + index))
 
         Sh_base = _heap_stability(base['rss'])
         Sh_hmp = _heap_stability(hmp['rss'])

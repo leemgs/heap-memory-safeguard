@@ -1,15 +1,24 @@
 \begin{abstract}
-Interactive latency and memory-pressure stalls on modern mobile and embedded platforms arise from a structural mismatch: applications run on a managed runtime that governs a Java heap through garbage collection, while large native (C/C++) components allocate on an unmanaged heap that the runtime cannot see, and the kernel reclaims memory page-by-page from fault addresses without any notion of application-level heap intent. We characterize this mismatch empirically on commercial devices and isolate two root causes: a \emph{visibility gap}, in which the Android Runtime (ART) is unaware of native heap growth until a physical page fault forces a reaction, and a \emph{temporal gap}, in which runtime garbage collection and kernel reclamation act reactively and at different moments, so intervention arrives after pressure has already built. Guided by these observations, we present the Heap Memory Safeguard (HMS), an OS-level framework that co-locates runtime heap telemetry with kernel-level reclamation under a single coordinated control loop. The core of HMS is a heap-utilization index $H_u$ that fuses resident footprint with allocation velocity, allowing the system to distinguish transient bursts from sustained growth and to trigger \emph{targeted} reclamation before pressure escalates---rather than uniformly reclaiming more aggressively. HMS requires no application changes and reuses standard runtime, memcg, and hardware-tagging interfaces. On two commercial smartphones across camera, gaming, on-device inference, and multitasking workloads, HMS improves heap stability, shortens garbage-collection pauses, and lowers reclaim latency relative to runtime-only and kernel-only baselines, and our analysis attributes these gains to cross-layer coordination rather than to increased reclaim aggressiveness alone.
+Android applications commonly combine an Android Runtime (ART) managed heap with
+native C/C++ allocations.  ART exposes managed-heap state, whereas Linux accounts
+resident pages and memory pressure; neither view alone identifies how both heaps
+contribute to an application's memory trajectory.  We present Heap Memory
+Safeguard (HMS), a cross-layer controller design that combines resident occupancy
+and recent allocation velocity and uses a two-threshold policy to request bounded,
+memory-cgroup-scoped reclaim.  This paper evaluates the control policy in a
+deterministic simulation artifact; it does not claim an Android, ART, or kernel
+deployment.  Four synthetic workload families exercise bursty media, gaming,
+inference, and multitasking patterns.  The artifact supports seeded replay,
+parameter sweeps, and baseline comparisons, and reports simulated heap variability,
+reclaim latency, garbage-collection pause, and peak resident footprint.  These
+results establish feasibility and expose controller trade-offs, but they are not
+device measurements.  We therefore treat Android integration, comparison with
+LMKD, \texttt{memory.reclaim}, DAMON/DAMOS, and MGLRU, and validation with raw
+Perfetto traces as required future work rather than completed contributions.
 \end{abstract}
 
-%% ---- CCS concepts (regenerate with the official ACM CCS tool before final submission) ----
 \begin{CCSXML}
 <ccs2012>
-   <concept>
-       <concept_id>10011007.10011006.10011050.10011017</concept_id>
-       <concept_desc>Software and its engineering~Garbage collection</concept_desc>
-       <concept_significance>500</concept_significance>
-   </concept>
    <concept>
        <concept_id>10011007.10011006.10011050.10011051</concept_id>
        <concept_desc>Software and its engineering~Allocation / deallocation strategies</concept_desc>
@@ -20,19 +29,11 @@ Interactive latency and memory-pressure stalls on modern mobile and embedded pla
        <concept_desc>Software and its engineering~Operating systems</concept_desc>
        <concept_significance>300</concept_significance>
    </concept>
-   <concept>
-       <concept_id>10010583.10010588.10010589</concept_id>
-       <concept_desc>Computer systems organization~Embedded software</concept_desc>
-       <concept_significance>300</concept_significance>
-   </concept>
 </ccs2012>
 \end{CCSXML}
 
-\ccsdesc[500]{Software and its engineering~Garbage collection}
 \ccsdesc[500]{Software and its engineering~Allocation / deallocation strategies}
 \ccsdesc[300]{Software and its engineering~Operating systems}
-\ccsdesc[300]{Computer systems organization~Embedded software}
 
-\keywords{Heap memory, memory management, garbage collection, cross-layer
-coordination, mobile operating systems, Android runtime, kernel reclamation,
-on-device inference}
+\keywords{memory management, cross-layer control, Android, memory cgroups,
+simulation, reproducible artifact}

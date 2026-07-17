@@ -1,33 +1,25 @@
 \section{Background}
-Android's memory management stack consists of several abstraction layers, including the user-space runtime, the Linux kernel, and hardware-assisted protection mechanisms. The same multi-level memory hierarchies have been studied in the mobile platforms where performance, power efficiency and reliability have to be trade off under the limited resources \cite{TCE_Goswami2024_ResourceAlloc, TCE_Kim2018_QoS}. Each layer has evolved independently but their interaction is weak and often leads to delayed or ineffective response to memory stress. Previous research on mobile systems has shown that isolated resource management often results in unstable latency and excessive overhead under dynamic workloads \cite{TC_10492614, TCE_Lim2013_VMP}. Understanding the behavior and limitations of each layer is therefore essential to motivate a coordinated, cross-layer heap management framework such as HMS.
+\subsection{Managed and Native Allocation}
+ART garbage collection reasons about managed objects.  Native allocations may be
+reported to the runtime through Android allocation-notification mechanisms, but
+such notifications are not equivalent to ownership of native objects or complete
+knowledge of allocator caches, mappings, sharing, and page residency.  Native
+allocation rate is likewise not RSS growth: lifetime, frees, reuse, page
+commitment, file mappings, and reclaim all intervene.  HMS consequently treats
+managed allocation, sampled native allocation, and RSS as distinct observations.
 
+\subsection{Linux and Android Memory Pressure}
+Linux memory cgroups account and limit groups of processes and expose a
+\texttt{memory.reclaim} interface for proactive, cgroup-scoped reclaim.  PSI means
+\emph{Pressure Stall Information} and quantifies time in which tasks stall for
+resources.  Android's LMKD consumes pressure and process-importance information;
+zRAM provides compressed swap; MGLRU and DAMON/DAMOS provide additional
+working-set and proactive-reclaim mechanisms.  HMS is a proposed trigger and
+budgeting layer above these facilities, not a replacement for them.
 
-
-\subsection{Android Runtime (ART)}
-
-ART employs a concurrent, compacting generational garbage collector that partitions the Java heap into young, tenured, and non-moving regions.
-This design follows established runtime-level optimization principles that have been widely explored in mobile systems to reduce pause times and improve responsiveness \cite{TC_10045641,TCE_Yan2019_FileAwareGC}.
-Runtime-driven garbage collection techniques have demonstrated benefits in flash- and DRAM-constrained devices by adapting reclamation behavior to allocation patterns \cite{TC_9252863,TPDS_4620111}.
-
-However, our observations show that ART primarily reasons about managed objects, and thus lacks direct visibility and control over native memory allocations that occur in JNI libraries, multimedia frameworks, or device drivers.
-This increase in unmanaged memory usage has been reported in several studies as a key factor in increasing the unpredictability of mobile platforms in environments where multimedia and AI workloads operate \cite{TC_aidnn, TC_10564838}.
-
-
-
-\subsection{Kernel-Level Memory Management}
-
-At the kernel layer, Android controls memory resources based on the Linux memory management subsystem, such as page reclamation, memory compression, compressed swap (zRAM), and memory cgroups. Compressed and shared swap mechanisms have been extensively studied as effective means to extend usable memory capacity in embedded and virtualized consumer electronics systems \cite{TCE_Hwang2012_CompressedSwap, TC_9140304, TC_10851391}.
-
-Memory cgroups in modern operating systems provide isolation and management at the process or UID level, but they operate only on a page-by-page basis, not on higher-level heap objects. Previous studies have reported that page-based memory reclamation schemes that do not reflect application-level memory usage semantics often result in excessive reclamation behavior, increasing system latency \cite{TC_9513533, TCE_Shin2010_FTL}. Therefore, static memory usage limits and traditional responsive kernel memory reclamation policies often do not correctly reflect the actual heap state or runtime memory intent.
-
-
-
-\subsection{Hardware-Assisted Memory Protection}
-
-Recent consumer SoCs integrate hardware-assisted memory-safety mechanisms such as the ARM Memory Tagging Extension (MTE), which detects memory-safety violations at low space and time cost. MTE, however, targets memory-safety defects such as use-after-free (UAF) and buffer overflows; it does not observe allocation patterns and cannot slow or bound continued heap growth. Across devices from different manufacturers, hardware-level protection therefore improves safety without improving memory-efficiency or utilization~\cite{TC_10564838, TC_10713235, TC_9252863}. In short, hardware tagging signals, on their own, are not sufficient to anticipate or bound memory pressure; they are most useful as one input to a higher-level, predictive control loop rather than as a standalone regulator.
-
-
-
-\subsection{Cross-Layer Gaps and Design Rationale}
-
-Many studies have proposed efficient memory management techniques at the runtime, kernel, and hardware levels. However, the Android memory stack is still fragmented, and each abstraction layer remains independent and isolated. Specifically, runtime garbage collection lacks visibility into native heap behavior, kernel memory reclamation fails to consider object-level semantics, and hardware protection mechanisms only react after memory allocation. Previous research in the consumer electronics field has consistently emphasized the importance of integrated, system-level resource management to ensure predictable performance, reliability, and scalability~\cite{TCE_Wang2025_CloudEdge, TC_10045641, TC_10851391}. Based on these studies, we designed Heap Memory Safeguard (HMS), which integrates runtime telemetry, kernel memory reclamation, and hardware feedback into a single, active control loop for heap stability.
+\subsection{Memory Tagging}
+Arm Memory Tagging Extension (MTE) detects classes of spatial and temporal memory
+safety errors.  An MTE fault is not a normal heap-pressure signal, and this paper
+does not use it as a predictor.  Production mode, overhead, causality, and fallback
+would require a separate device study.  MTE is therefore outside the evaluated HMS
+control path.

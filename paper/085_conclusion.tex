@@ -1,10 +1,9 @@
 \section{Conclusion}
-We presented HMS, an OS-level framework that improves heap management on modern mobile devices by coordinating the runtime and kernel layers. Motivated by an empirical characterization of two structural gaps---a \emph{visibility gap} between ART and native-heap growth and a \emph{temporal gap} between reactive runtime and kernel controllers---HMS fuses resident footprint and allocation velocity into a single predictive index, $H_u$, and uses it to drive targeted, bounded kernel reclamation while feeding page-level pressure back into the runtime's decision loop. Across camera, gaming, on-device inference, and multitasking workloads on two commercial devices, HMS improves heap stability and shortens garbage-collection pauses and reclaim latency relative to runtime-only and kernel-only baselines. Beyond aggregate speedups, our analysis links these gains to the two gaps HMS closes, examines the reclaim--GC interaction, and separates the effect of cross-layer coordination from that of merely reclaiming more aggressively. Because HMS requires no application changes and reuses standard runtime, memcg, and tagging interfaces, it applies broadly to Linux-based mobile and embedded platforms. Future work includes extending the predictor beyond a first-order occupancy estimate and evaluating HMS across a wider range of SoCs and memory tiers.
-
-
-
-%\section*{Acknowledgment}
-%The authors used AI-assisted tools (e.g., GPT-based assistants) for limited copy-editing and checklisting (e.g., consistency of units, punctuation, and figure accessibility). All technical content, methodology, experimental design, and results were created and verified by the authors. 
-
-
-% Artifacts for replication (source, scripts, and raw traces) are provided in the supplementary repository.
+HMS is a proposed coordination policy for combining per-application resident
+occupancy and recent growth before requesting bounded memory-cgroup reclaim.  The
+seeded artifact demonstrates the policy's internal behavior and parameter
+sensitivity in simulation.  It does not demonstrate an Android deployment or
+commercial-device performance.  By separating those two claims, defining the
+metrics consistently, removing MTE from pressure prediction, and publishing the
+remaining validation requirements, this revision provides an auditable foundation
+for a future AOSP/kernel implementation and device study.

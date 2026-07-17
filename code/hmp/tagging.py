@@ -1,9 +1,7 @@
 import numpy as np
 
 class TaggingUnit:
-    """A simple memory-tagging proxy.
-    It labels 'unstable' regions and feeds back to the controller as a rate limiter.
-    """
+    """A volatility proxy; this is unrelated to Arm MTE fault detection."""
     def __init__(self, granule_mb: float = 0.0625):
         self.granule = granule_mb
 

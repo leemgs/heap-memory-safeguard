@@ -1,5 +1,11 @@
 #!/usr/bin/env python3
-import argparse, os, json
+import argparse, os, sys
+from pathlib import Path
+
+# Allow the documented `python scripts/run_experiments.py` invocation without
+# requiring an editable package installation.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -9,7 +15,7 @@ def ensure_dir(d):
     os.makedirs(d, exist_ok=True)
 
 def main():
-    ap = argparse.ArgumentParser(description="Reproduce HMS results (simulation)")
+    ap = argparse.ArgumentParser(description="Explore the HMS policy in simulation")
     ap.add_argument("--alpha", type=float, default=0.35)
     ap.add_argument("--theta1", type=float, default=0.12)
     ap.add_argument("--theta2", type=float, default=0.18)
